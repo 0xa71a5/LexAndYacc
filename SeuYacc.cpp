@@ -23,32 +23,39 @@ public:
 	int dotPosition;//记录点的位置
 	string lookaheadSymbol;//可规约预测符号集合 每个item设置为一个
 	Item(){dotPosition=0;}
-	void Move()
+	bool Move()
 	{
 		if(GetCurrentSymbol()!=END)//防止溢出
+		{
 			dotPosition++;//移动点的位置
+			return true;//移动成功  返回true
+		}
+		else
+			return false;//已经属于最尾部  返回false
 	}
 	string GetCurrentSymbol()
 	{
-		if(dotPosition<right.size())
+		if((uint32_t)dotPosition<right.size())
 			return right[dotPosition];
 		return END;//定义的终止符
 	}
 	string GetNextSymbol()
 	{
-		if(dotPosition+1<right.size())
+		if((uint32_t)dotPosition+1<right.size())
 			return right[dotPosition+1];
 		return END;//定义的终止符
 	}
 	void printItem()
 	{
 		printf("%s ---> ",left.c_str());
-		for(int i=0;i<right.size();i++)
+		for(uint32_t i=0;i<right.size();i++)
 		{
 			if(dotPosition==i)
 				printf(".");
 			printf("%s ",right[i].c_str());
 		}
+		if(dotPosition==right.size())
+			printf(". ");
 		printf(",%s\n",lookaheadSymbol.c_str());
 	}
 };
@@ -64,8 +71,16 @@ struct PDAstate{//PDA状态
 	vector<PDAstate* > frontState;//指向前一状态
 	string symbol;
 	};
-
 	vector<PDAedge> edges;
+	void printState()
+	{
+		printf("StateID:%d\n",id);
+		for(uint32_t i=0;i<itemSet.size();i++)
+		{
+				cout<<"\t";
+				itemSet[i].printItem();
+		}
+	}
 };
 
 struct PDA{
@@ -77,7 +92,7 @@ set <string> Terminal;//终结符集
 set <string> NonTerminal;//非终结符集
 //set <Item>	 Producers;//产生式集
 vector <Item>	 Producers;//产生式集  使用set报错？？？
-PDA myPDA;
+PDA globalPDA;
 
 
 struct Op{
@@ -129,12 +144,12 @@ set<string> FirstDouble(string input0,string input1)
 
 bool ItemContained(vector<Item> input0,Item input1)
 {
-	for(int i=0;i<input0.size();i++)
+	for(uint32_t i=0;i<input0.size();i++)
 	{
 		if(input0[i].left==input1.left&&input0[i].dotPosition==input1.dotPosition&&input0[i].right.size()==input1.right.size()&&input0[i].lookaheadSymbol==input1.lookaheadSymbol)
 		{
 			bool flag=true;
-			for(int j=0;j<input0[i].right.size();j++)
+			for(uint32_t j=0;j<input0[i].right.size();j++)
 			{
 				if(input0[i].right[j]!=input1.right[j]){flag=false;break;}
 			}
@@ -145,6 +160,27 @@ bool ItemContained(vector<Item> input0,Item input1)
 	return false;
 }
 
+bool StateEqual(PDAstate A,PDAstate B)//判断两个状态是否相等，这个时间复杂度。。。
+{
+	if(A.itemSet.size()!=B.itemSet.size())
+		return false;//如果大小不相同  两个状态肯定不相同
+	for(int i=0;i<B.itemSet.size();i++)
+	{
+		if(!ItemContained(A.itemSet,B.itemSet[i]))//如果任何一个B中的状态不存在于A中那么肯定不相等
+			return false;
+	}
+	return true;
+}
+bool PDAstateContained(PDA input0,PDAstate input1)//判断一个PDAstate是否出现在PDA中
+{
+	for(int i=0;i<input0.states.size();i++)
+	{
+		//判断每个状态是否与当前这个状态相同
+		if(StateEqual(input0.states[i],input1))
+			return true;//只要input0中有一个状态与input1状态相等，那么input1就包含于input0中
+	}
+	return false;
+}
 void Closure(PDAstate& input)
 {//！！注意是要向I中不停迭代，需要检测前后两次迭代是否再次产生新的产生式加入其中
 	vector<Item> I=input.itemSet;
@@ -155,7 +191,7 @@ void Closure(PDAstate& input)
 		string A;
 		string alpha,B,beta;
 		string a;
-		for(int itemIndex=0;itemIndex<I.size();itemIndex++)//(auto eachItem=I.begin();eachItem!=I.end();eachItem++)
+		for(uint32_t itemIndex=0;itemIndex<I.size();itemIndex++)//(auto eachItem=I.begin();eachItem!=I.end();eachItem++)
 		{
 			Item eachItem=I[itemIndex];
 			B=eachItem.GetCurrentSymbol();//B是当前项目的点所指，如果为END表示为空
@@ -179,8 +215,8 @@ void Closure(PDAstate& input)
 							toAddItem.dotPosition=0;
 							toAddItem.lookaheadSymbol=*eachfirst;
 							//将新产生的产生式加入到集合I中
-							cout<<"Add new item to I:";
-							toAddItem.printItem();
+							//cout<<"Add new item to I:";
+							//toAddItem.printItem();
 							//判断当前的I中是否包含toAddItem
 							if(!ItemContained(I,toAddItem))
 								I.push_back(toAddItem);
@@ -190,9 +226,28 @@ void Closure(PDAstate& input)
 			}
 		}
 	}
-	while(I.size()!=lastSize);
+	while(I.size()!=lastSize);//如果此次的大小和上次大小相同 说明不再产生新的produce 迭代结束
 	input.itemSet=I;
 }
+PDAstate GOTO(PDAstate I,string X)
+{
+	PDAstate J;//将J初始化为空集
+	for(uint32_t itemIndex=0;itemIndex<I.itemSet.size();itemIndex++)//(auto eachItem=I.begin();eachItem!=I.end();eachItem++)
+	{//对于I中的每个项，[A->alpha. X beta,a]
+		//将项[A->alpha X .beta,a]加入到J中
+		Item eachItem=I.itemSet[itemIndex];
+		if(eachItem.GetCurrentSymbol()==X)
+		{
+			
+			eachItem.Move();//如果当前项是X 那么移动点到后面
+			J.itemSet.push_back(eachItem);//将其加入到J中
+		}
+	}
+	Closure(J);//对J进行闭包处理
+	//debugprint("[=]");
+	return J;
+}
+
 
 void ParseYaccFile()
 {
@@ -374,7 +429,7 @@ void ParseYaccFile()
 					Item tempProducer;
 					tempProducer.dotPosition=0;
 					tempProducer.left=tempLeft;
-					for(int i=0;i<tempRight.size();i++)
+					for(uint32_t i=0;i<tempRight.size();i++)
 					{
 						tempProducer.right.push_back(tempRight[i]);
 					}
@@ -412,39 +467,75 @@ void ParseYaccFile()
 	}
 	cout<<endl;
 	cout<<"[+]Print Producers\n";
-	for(int i=0;i<Producers.size();i++)
+	for(uint32_t i=0;i<Producers.size();i++)
 	{
 		cout<<"("<<Producers[i].left<<") ----> ";
-		for(int j=0;j<Producers[i].right.size();j++)
+		for(uint32_t j=0;j<Producers[i].right.size();j++)
 			cout<<"("<<Producers[i].right[j]<<") ";
 		cout<<endl;
 	}
 	std::cout<<"\n[+]Print Operator\n";
-	for(int i=0;i<Operators.size();i++)
+	for(uint32_t i=0;i<Operators.size();i++)
 	{
 		std::cout<<Operators[i].name<<"\t"<<Operators[i].type<<"\t"<<Operators[i].priority<<"\t"<<endl;
 	}
 	ifile.close();
 	ofile.close();
-	
 }
 void GeneratePDA()
 {
+	PDA myPDA;
 	//默认Producer中存放的第0个产生式就是初始产生式 小心bug
-	PDAstate initState;//设置初始状态
+	PDAstate S0;//设置初始状态
 	Item item0;
-	int stateIndex=0;
+	int globalStateId=0;
 	Terminal.insert("$");//向终结符中插入结束符
 	//设置初始状态
-	initState.id=stateIndex++;
+	S0.id=globalStateId++;
 	if(Producers.size()==0)return;//如果当前灭有产生式 那就不玩了
 	Producers[0].lookaheadSymbol="$";//首个符号加入$作为终结表示
-	initState.itemSet.push_back(Producers[0]);//将第0个产生式加入初始状态中
-	Closure(initState);
-	debugprint("[+]After closure ,s0 contain:\n");
-	for(auto i=initState.itemSet.begin();i!=initState.itemSet.end();i++)
-		i->printItem();
-	debugprint("[+]Generate PDA test finish\n");
+	S0.itemSet.push_back(Producers[0]);//将第0个产生式加入初始状态中
+	Closure(S0);
+	myPDA.states.push_back(S0);
+	debugprint("[+]***************PDA BEGIN*****************\n");
+	debugprint("[+]");
+	S0.printState();
+	//printf("[+]Test if PDA contain S0:%d\n",PDAstateContained(myPDA,S0_copy));
+	uint32_t lastSize=myPDA.states.size();
+	do
+	{
+		lastSize=myPDA.states.size();
+		for(int i=0;i<myPDA.states.size();i++)
+		{
+			//对于每一个状态，实施GOTO X 行为
+			PDAstate newPDAstate;
+			for(auto ter=Terminal.begin();ter!=Terminal.end();ter++)
+			{
+				newPDAstate=GOTO(myPDA.states[i],*ter);
+				if(newPDAstate.itemSet.size()!=0&&PDAstateContained(myPDA,newPDAstate)==false)
+				{
+					newPDAstate.id=globalStateId++;
+					debugprint("[+]");
+					newPDAstate.printState();
+					myPDA.states.push_back(newPDAstate);
+				}
+			}
+			for(auto ter=NonTerminal.begin();ter!=NonTerminal.end();ter++)
+			{
+				newPDAstate=GOTO(myPDA.states[i],*ter);
+				if(newPDAstate.itemSet.size()!=0&&PDAstateContained(myPDA,newPDAstate)==false)
+				{
+					newPDAstate.id=globalStateId++;
+					debugprint("[+]");
+					newPDAstate.printState();
+					myPDA.states.push_back(newPDAstate);
+				}
+			}
+		}
+	}
+	while(myPDA.states.size()!=lastSize);//重复迭代一直到PDA的大小不再变化
+
+	debugprint("\n[+]Generate PDA test finish\n");
 }
 
 void main()
@@ -471,4 +562,11 @@ void main_()
 		cout<<*i<<"\t";
 	cout<<endl;
 	*/	
+	/*
+					else
+					{
+						debugprint("\n[?]new state but already exsitd\n");
+						newPDAstate.printState();
+					}
+					*/
 }
