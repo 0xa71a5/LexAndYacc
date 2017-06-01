@@ -131,7 +131,7 @@ bool ItemContained(vector<Item> input0,Item input1)
 {
 	for(int i=0;i<input0.size();i++)
 	{
-		if(input0[i].left==input1.left&&input0[i].dotPosition==input1.dotPosition&&input0[i].right.size()==input1.right.size())
+		if(input0[i].left==input1.left&&input0[i].dotPosition==input1.dotPosition&&input0[i].right.size()==input1.right.size()&&input0[i].lookaheadSymbol==input1.lookaheadSymbol)
 		{
 			bool flag=true;
 			for(int j=0;j<input0[i].right.size();j++)
@@ -445,7 +445,6 @@ void GeneratePDA()
 	for(auto i=initState.itemSet.begin();i!=initState.itemSet.end();i++)
 		i->printItem();
 	debugprint("[+]Generate PDA test finish\n");
-
 }
 
 void main()
@@ -454,6 +453,7 @@ void main()
 	ParseYaccFile();
 	//Step2. 生成下推自动机
 	GeneratePDA();
+	//Step3. 
 	std::cout<<"Done\n";
 }
 
