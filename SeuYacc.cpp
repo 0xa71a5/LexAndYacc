@@ -21,8 +21,8 @@ public:
 	string left;//产生式左部
 	vector<string> right;//产生式右部
 	int dotPosition;//记录点的位置
-	set<string> predictSymbol;//可规约预测符号集合
-	Item(){}
+	string lookaheadSymbol;//可规约预测符号集合 每个item设置为一个
+	Item(){dotPosition=0;}
 	void Move()
 	{
 		if(GetCurrentSymbol()!=END)//防止溢出
@@ -33,6 +33,23 @@ public:
 		if(dotPosition<right.size())
 			return right[dotPosition];
 		return END;//定义的终止符
+	}
+	string GetNextSymbol()
+	{
+		if(dotPosition+1<right.size())
+			return right[dotPosition+1];
+		return END;//定义的终止符
+	}
+	void printItem()
+	{
+		printf("%s ---> ",left.c_str());
+		for(int i=0;i<right.size();i++)
+		{
+			if(dotPosition==i)
+				printf(".");
+			printf("%s ",right[i].c_str());
+		}
+		printf(",%s\n",lookaheadSymbol.c_str());
 	}
 };
 
@@ -59,7 +76,9 @@ struct PDA{
 set <string> Terminal;//终结符集
 set <string> NonTerminal;//非终结符集
 //set <Item>	 Producers;//产生式集
-vector <Item>	 Producers;//产生式集  不能用set？？？
+vector <Item>	 Producers;//产生式集  使用set报错？？？
+PDA myPDA;
+
 
 struct Op{
 	string name;
@@ -68,11 +87,116 @@ struct Op{
 };
 vector<Op> Operators;
 
-
-void main()
+set<string> First(string input)
 {
-	//Step1. 读取yacc文件
-	string srcFile = "D:\\minic.y";//Yacc文件
+	set<string> ret;
+	if(input==END)return ret;
+	if(Terminal.count(input)!=0)
+	{
+		ret.insert(input);
+		return ret;
+	}
+	for(auto i=Producers.begin();i!=Producers.end();i++)
+	{
+		if(i->left==input)
+		{
+			if(Terminal.count(i->right[0])!=0)
+				ret.insert(i->right[0]);//如果当前input的右部第一个是终结符 那么加入结果集
+			else
+			{
+				set<string> res=First(i->right[0]);//递归查询first
+				for(auto j=res.begin();j!=res.end();j++)
+				{
+					ret.insert(*j);//将新的first合并到结果集中
+				}
+			}
+		}
+	}
+	return ret;
+}
+
+set<string> FirstDouble(string input0,string input1)
+{
+	set<string> ret;
+	string input="";
+	if(input0==END)
+		input=input1;
+	else
+		input=input0;
+	ret = First(input);
+	return ret;
+}
+
+bool ItemContained(vector<Item> input0,Item input1)
+{
+	for(int i=0;i<input0.size();i++)
+	{
+		if(input0[i].left==input1.left&&input0[i].dotPosition==input1.dotPosition&&input0[i].right.size()==input1.right.size())
+		{
+			bool flag=true;
+			for(int j=0;j<input0[i].right.size();j++)
+			{
+				if(input0[i].right[j]!=input1.right[j]){flag=false;break;}
+			}
+			if(flag==true)
+				return true;
+		}
+	}
+	return false;
+}
+
+void Closure(PDAstate& input)
+{//！！注意是要向I中不停迭代，需要检测前后两次迭代是否再次产生新的产生式加入其中
+	vector<Item> I=input.itemSet;
+	int lastSize;
+	do
+	{
+		lastSize=I.size();//记录I的大小 用作迭代
+		string A;
+		string alpha,B,beta;
+		string a;
+		for(int itemIndex=0;itemIndex<I.size();itemIndex++)//(auto eachItem=I.begin();eachItem!=I.end();eachItem++)
+		{
+			Item eachItem=I[itemIndex];
+			B=eachItem.GetCurrentSymbol();//B是当前项目的点所指，如果为END表示为空
+			beta=eachItem.GetNextSymbol();//beta是B后面的符号
+			a=eachItem.lookaheadSymbol;
+			//接下来找到所有由B引出的产生式
+			if(B!=END)
+			{
+				//遍历所有由B作为左部的产生式
+				for(auto eachp=Producers.begin();eachp!=Producers.end();eachp++)
+				{
+					if(eachp->left==B)
+					{
+						set<string> firstBetAlp=FirstDouble(beta,a);
+						//printf("[+]Size of first(%s,%s)=%d\n",beta.c_str(),a.c_str(),firstBetAlp.size());
+						for(auto eachfirst=firstBetAlp.begin();eachfirst!=firstBetAlp.end();eachfirst++)
+						{
+							Item toAddItem;
+							toAddItem.left=eachp->left;
+							toAddItem.right=eachp->right;
+							toAddItem.dotPosition=0;
+							toAddItem.lookaheadSymbol=*eachfirst;
+							//将新产生的产生式加入到集合I中
+							cout<<"Add new item to I:";
+							toAddItem.printItem();
+							//判断当前的I中是否包含toAddItem
+							if(!ItemContained(I,toAddItem))
+								I.push_back(toAddItem);
+						}
+					}
+				}
+			}
+		}
+	}
+	while(I.size()!=lastSize);
+	input.itemSet=I;
+}
+
+void ParseYaccFile()
+{
+	string srcFile = "D:\\test.y";//Yacc文件
 	
 	ifile.open(srcFile.c_str(), ios::in);
 	ofile.open("D:\\generatedYacc.h", ios::out);
@@ -259,9 +383,12 @@ void main()
 				}
 				else//当前遇到的是右部
 				{
-					tempRight.push_back(string(toke));
-					if(Terminal.count(string(toke))==0)//如果当前的toke不是终结符 那么一定是非终结符
-						NonTerminal.insert(toke);
+					if(string(toke).find("{")==-1)//排除语义动作SemantAction
+					{
+						tempRight.push_back(string(toke));
+						if(Terminal.count(string(toke))==0)//如果当前的toke不是终结符 那么一定是非终结符
+							NonTerminal.insert(toke);
+					}
 					toke=strtok_s(NULL,"\t \n",&nextToke);
 				}
 			}
@@ -299,6 +426,34 @@ void main()
 	}
 	ifile.close();
 	ofile.close();
+	
+}
+void GeneratePDA()
+{
+	//默认Producer中存放的第0个产生式就是初始产生式 小心bug
+	PDAstate initState;//设置初始状态
+	Item item0;
+	int stateIndex=0;
+	Terminal.insert("$");//向终结符中插入结束符
+	//设置初始状态
+	initState.id=stateIndex++;
+	if(Producers.size()==0)return;//如果当前灭有产生式 那就不玩了
+	Producers[0].lookaheadSymbol="$";//首个符号加入$作为终结表示
+	initState.itemSet.push_back(Producers[0]);//将第0个产生式加入初始状态中
+	Closure(initState);
+	debugprint("[+]After closure ,s0 contain:\n");
+	for(auto i=initState.itemSet.begin();i!=initState.itemSet.end();i++)
+		i->printItem();
+	debugprint("[+]Generate PDA test finish\n");
+
+}
+
+void main()
+{
+	//Step1. 读取yacc文件
+	ParseYaccFile();
+	//Step2. 生成下推自动机
+	GeneratePDA();
 	std::cout<<"Done\n";
 }
 
@@ -308,5 +463,12 @@ void main_()
 	string lineStr="abc";
 	lineStr=("ff");
 	cout<<"[]"<<lineStr<<"[]"<<endl;
-	
+	/*
+	string firstEle="S";
+	set<string> res=First(firstEle);
+	printf("First(%s) = ",firstEle.c_str());
+	for(auto i=res.begin();i!=res.end();i++)
+		cout<<*i<<"\t";
+	cout<<endl;
+	*/	
 }
