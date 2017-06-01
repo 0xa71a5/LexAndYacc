@@ -60,18 +60,25 @@ public:
 	}
 };
 
-
+struct PDAedge{//PDA边
+		int nextState;//指向下一状态
+		string symbol;
+	};
 
 struct PDAstate{//PDA状态
 	int id;
 	vector<Item> itemSet;
 
-	struct PDAedge{//PDA边
-	vector<PDAstate* > nextState;//指向下一状态
-	vector<PDAstate* > frontState;//指向前一状态
-	string symbol;
-	};
 	vector<PDAedge> edges;
+	bool ContainEdge(PDAedge input)
+	{
+		for(u32 i=0;i<edges.size();i++)
+		{
+			if(edges[i].nextState==input.nextState&&edges[i].symbol==input.symbol)
+				return true;
+		}
+		return false;
+	}
 	void printState()
 	{
 		printf("StateID:%d\n",id);
@@ -80,11 +87,21 @@ struct PDAstate{//PDA状态
 				cout<<"\t";
 				itemSet[i].printItem();
 		}
+		for(uint32_t i=0;i<edges.size();i++)
+		{
+			printf("(%d) ---%s---> (%d)\n",id,edges[i].symbol.c_str(),edges[i].nextState);
+		}
+		printf("\n");
 	}
 };
 
 struct PDA{
 	vector<PDAstate> states;
+	void printState()
+	{
+		for(u32 i=0;i<states.size();i++)
+			states[i].printState();
+	}
 };
 
 
@@ -171,15 +188,15 @@ bool StateEqual(PDAstate A,PDAstate B)//判断两个状态是否相等，这个时间复杂度。。
 	}
 	return true;
 }
-bool PDAstateContained(PDA input0,PDAstate input1)//判断一个PDAstate是否出现在PDA中
+int PDAstateContained(PDA input0,PDAstate input1)//判断一个PDAstate是否出现在PDA中
 {
 	for(int i=0;i<input0.states.size();i++)
 	{
 		//判断每个状态是否与当前这个状态相同
 		if(StateEqual(input0.states[i],input1))
-			return true;//只要input0中有一个状态与input1状态相等，那么input1就包含于input0中
+			return i;//只要input0中有一个状态与input1状态相等，那么input1就包含于input0中
 	}
-	return false;
+	return -1;
 }
 void Closure(PDAstate& input)
 {//！！注意是要向I中不停迭代，需要检测前后两次迭代是否再次产生新的产生式加入其中
@@ -251,7 +268,7 @@ PDAstate GOTO(PDAstate I,string X)
 
 void ParseYaccFile()
 {
-	string srcFile = "D:\\test.y";//Yacc文件
+	string srcFile = "D:\\minic.y";//Yacc文件
 	
 	ifile.open(srcFile.c_str(), ios::in);
 	ofile.open("D:\\generatedYacc.h", ios::out);
@@ -498,9 +515,7 @@ void GeneratePDA()
 	Closure(S0);
 	myPDA.states.push_back(S0);
 	debugprint("[+]***************PDA BEGIN*****************\n");
-	debugprint("[+]");
-	S0.printState();
-	//printf("[+]Test if PDA contain S0:%d\n",PDAstateContained(myPDA,S0_copy));
+
 	uint32_t lastSize=myPDA.states.size();
 	do
 	{
@@ -509,32 +524,64 @@ void GeneratePDA()
 		{
 			//对于每一个状态，实施GOTO X 行为
 			PDAstate newPDAstate;
+			//下面是对当前的状态施行基于终结符和非终结符的GOTO操作
+			//如果 GOTO的结果非空并且目前的状态集中不含有 那么加入作为一个新状态
 			for(auto ter=Terminal.begin();ter!=Terminal.end();ter++)
 			{
 				newPDAstate=GOTO(myPDA.states[i],*ter);
-				if(newPDAstate.itemSet.size()!=0&&PDAstateContained(myPDA,newPDAstate)==false)
+				if(newPDAstate.itemSet.size()!=0)
 				{
-					newPDAstate.id=globalStateId++;
-					debugprint("[+]");
-					newPDAstate.printState();
-					myPDA.states.push_back(newPDAstate);
+					int stateId=PDAstateContained(myPDA,newPDAstate);
+					if(stateId==-1)//找不到这个状态，说明是新状态
+					{
+						newPDAstate.id=globalStateId++;
+						myPDA.states.push_back(newPDAstate);
+						//为这个新的状态创建边
+						PDAedge newEdge;
+						newEdge.nextState=newPDAstate.id;//新边指向的状态的号码
+						newEdge.symbol=*ter;//新边上的符号标记
+						myPDA.states[i].edges.push_back(newEdge);
+					}
+					else
+					{
+						PDAedge newEdge;
+						newEdge.nextState=stateId;//新边指向的状态的号码
+						newEdge.symbol=*ter;//新边上的符号标记
+						if(myPDA.states[i].ContainEdge(newEdge)==false)//如果不包含这条边 加进去
+							myPDA.states[i].edges.push_back(newEdge);
+					}
 				}
 			}
 			for(auto ter=NonTerminal.begin();ter!=NonTerminal.end();ter++)
 			{
 				newPDAstate=GOTO(myPDA.states[i],*ter);
-				if(newPDAstate.itemSet.size()!=0&&PDAstateContained(myPDA,newPDAstate)==false)
+				if(newPDAstate.itemSet.size()!=0)
 				{
-					newPDAstate.id=globalStateId++;
-					debugprint("[+]");
-					newPDAstate.printState();
-					myPDA.states.push_back(newPDAstate);
+					int stateId=PDAstateContained(myPDA,newPDAstate);
+					if(stateId==-1)//找不到这个状态，说明是新状态
+					{
+						newPDAstate.id=globalStateId++;
+						myPDA.states.push_back(newPDAstate);
+						//为这个新的状态创建边
+						PDAedge newEdge;
+						newEdge.nextState=newPDAstate.id;//新边指向的状态的号码
+						newEdge.symbol=*ter;//新边上的符号标记
+						myPDA.states[i].edges.push_back(newEdge);
+					}
+					else
+					{
+						PDAedge newEdge;
+						newEdge.nextState=stateId;//新边指向的状态的号码
+						newEdge.symbol=*ter;//新边上的符号标记
+						if(myPDA.states[i].ContainEdge(newEdge)==false)//如果不包含这条边 加进去
+							myPDA.states[i].edges.push_back(newEdge);
+					}
 				}
 			}
 		}
 	}
 	while(myPDA.states.size()!=lastSize);//重复迭代一直到PDA的大小不再变化
-
+	myPDA.printState();
 	debugprint("\n[+]Generate PDA test finish\n");
 }
 
