@@ -10,6 +10,7 @@
 #include <queue>
 #include "mainHeader.h"
 #include <cstddef>
+#include<time.h>
 #define debugprint printf
 using namespace std;
 
@@ -110,7 +111,7 @@ set <string> NonTerminal;//非终结符集
 //set <Item>	 Producers;//产生式集
 vector <Item>	 Producers;//产生式集  使用set报错？？？
 PDA globalPDA;
-
+map<string,set<string>> FirstCollection;
 
 struct Op{
 	string name;
@@ -119,7 +120,18 @@ struct Op{
 };
 vector<Op> Operators;
 
+
 set<string> First(string input)
+{
+	set<string> ret;
+	if(Terminal.count(input)!=0)
+		ret.insert(input);
+	else
+		ret=FirstCollection[input];
+	return ret;
+}
+/*
+set<string> First_(string input)
 {
 	set<string> ret;
 	if(input==END)return ret;
@@ -146,7 +158,7 @@ set<string> First(string input)
 	}
 	return ret;
 }
-
+*/
 set<string> FirstDouble(string input0,string input1)
 {
 	set<string> ret;
@@ -158,7 +170,48 @@ set<string> FirstDouble(string input0,string input1)
 	ret = First(input);
 	return ret;
 }
+void PrintFirst(string input)
+{
+	set<string> res=First(input);
+	printf("First(%s)= {",input.c_str());
+	for(auto i=res.begin();i!=res.end();i++)
+	{
+		cout<<*i<<",";
+	}
+	cout<<"}\n";
+}
 
+void GenerateAllFirstWithOutRecursion()
+{
+	int totalSize=0;
+	int lastTotalSize=0;
+	printf("Begin generate\n");
+	//首先初始化每个非终结符的Set为空
+	for(auto nonTer=NonTerminal.begin();nonTer!=NonTerminal.end();nonTer++)
+		FirstCollection[*nonTer]=set<string>();
+	//迭代开始
+	do{
+		lastTotalSize=totalSize;
+		totalSize=0;
+		for(auto producer=Producers.begin();producer!=Producers.end();producer++)
+		{
+			//检测是否是终结符
+			if(Terminal.count(producer->right[0]))
+				FirstCollection[producer->left].insert(producer->right[0]);//如果右部第一个是终结符，则插入
+			else//是非终结符 那么将非终结符X的First(x)插入其中
+			{
+				for(auto eachFirst=FirstCollection[producer->right[0]].begin();eachFirst!=FirstCollection[producer->right[0]].end();eachFirst++)
+				{
+					FirstCollection[producer->left].insert(*eachFirst);//将对方的每一个first加入到其中
+				}
+			}
+			totalSize+=FirstCollection[producer->left].size();
+		}
+	}
+	while(totalSize!=lastTotalSize);
+	printf("End generate\n");
+}
+//耗时！
 bool ItemContained(vector<Item> input0,Item input1)
 {
 	for(uint32_t i=0;i<input0.size();i++)
@@ -176,7 +229,26 @@ bool ItemContained(vector<Item> input0,Item input1)
 	}
 	return false;
 }
-
+int GetProducerIndex(Item input1)
+{
+	for(uint32_t i=0;i<Producers.size();i++)
+	{
+		if(Producers[i].left==input1.left&&Producers[i].right.size()==input1.right.size())
+		{
+			bool flag=true;
+			for(uint32_t j=0;j<Producers[i].right.size();j++)
+			{
+				if(Producers[i].right[j]!=input1.right[j])
+				{
+					flag=false;break;
+				}
+			}
+			if(flag==true)
+				return i;
+		}
+	}
+	return -1;
+}
 bool StateEqual(PDAstate A,PDAstate B)//判断两个状态是否相等，这个时间复杂度。。。
 {
 	if(A.itemSet.size()!=B.itemSet.size())
@@ -198,6 +270,26 @@ int PDAstateContained(PDA input0,PDAstate input1)//判断一个PDAstate是否出现在PDA
 	}
 	return -1;
 }
+
+map<string,vector<Item>> GlobalProducerMap;
+void GenerateProducerMap()
+{
+	cout<<"Test begin";
+	for(auto i=NonTerminal.begin();i!=NonTerminal.end();i++)
+	{
+		GlobalProducerMap[*i]=vector<Item>();
+	}
+	for(auto pro=Producers.begin();pro!=Producers.end();pro++)
+	{
+		GlobalProducerMap[pro->left].push_back(*pro);
+	}
+	for(auto i=GlobalProducerMap.begin();i!=GlobalProducerMap.end();i++)
+	{
+		for(int j=0;j<i->second.size();j++)
+			i->second[j].printItem();
+	}
+	cout<<"Test end";
+}
 void Closure(PDAstate& input)
 {//！！注意是要向I中不停迭代，需要检测前后两次迭代是否再次产生新的产生式加入其中
 	vector<Item> I=input.itemSet;
@@ -217,6 +309,28 @@ void Closure(PDAstate& input)
 			//接下来找到所有由B引出的产生式
 			if(B!=END)
 			{
+				vector<Item> eachPs=GlobalProducerMap[B];
+				for(auto eachp=eachPs.begin();eachp!=eachPs.end();eachp++)
+				{
+					set<string> firstBetAlp=FirstDouble(beta,a);
+						//printf("[+]Size of first(%s,%s)=%d\n",beta.c_str(),a.c_str(),firstBetAlp.size());
+						for(auto eachfirst=firstBetAlp.begin();eachfirst!=firstBetAlp.end();eachfirst++)
+						{
+							Item toAddItem;
+							toAddItem.left=eachp->left;
+							toAddItem.right=eachp->right;
+							toAddItem.dotPosition=0;
+							toAddItem.lookaheadSymbol=*eachfirst;
+							//将新产生的产生式加入到集合I中
+							//cout<<"Add new item to I:";
+							//toAddItem.printItem();
+							//判断当前的I中是否包含toAddItem
+							if(!ItemContained(I,toAddItem))
+								I.push_back(toAddItem);
+						}
+				}
+
+				/*
 				//遍历所有由B作为左部的产生式
 				for(auto eachp=Producers.begin();eachp!=Producers.end();eachp++)
 				{
@@ -240,6 +354,8 @@ void Closure(PDAstate& input)
 						}
 					}
 				}
+
+				*/
 			}
 		}
 	}
@@ -255,20 +371,19 @@ PDAstate GOTO(PDAstate I,string X)
 		Item eachItem=I.itemSet[itemIndex];
 		if(eachItem.GetCurrentSymbol()==X)
 		{
-			
 			eachItem.Move();//如果当前项是X 那么移动点到后面
 			J.itemSet.push_back(eachItem);//将其加入到J中
 		}
 	}
+	
 	Closure(J);//对J进行闭包处理
+	
 	//debugprint("[=]");
 	return J;
 }
-
-
-void ParseYaccFile()
+void ParseYaccFile(string filename)
 {
-	string srcFile = "D:\\minic.y";//Yacc文件
+	string srcFile = filename; //Yacc文件
 	
 	ifile.open(srcFile.c_str(), ios::in);
 	ofile.open("D:\\generatedYacc.h", ios::out);
@@ -376,6 +491,8 @@ void ParseYaccFile()
 							newOp.priority=currentPriority;
 							newOp.type="left";
 							Operators.push_back(newOp);
+							//将操作符加入终结符表中
+							Terminal.insert(string(toke));//new add
 						}
 					}
 					currentPriority++;
@@ -402,7 +519,14 @@ void ParseYaccFile()
 		int annoteIndex=lineStr.find("/*");
 		if(annoteIndex!=-1)
 			lineStr=lineStr.substr(0,annoteIndex);
+
+		annoteIndex=lineStr.find("{#");//检测是否有语义动作
+		if(annoteIndex!=-1)
+			lineStr=lineStr.substr(0,annoteIndex);
+
 		lineStr=lineStr+'\0';
+
+
 		//默认每一行的有效标识符从行首开始
 		if(lineStr.find("%%")!=-1)
 		{
@@ -455,12 +579,12 @@ void ParseYaccFile()
 				}
 				else//当前遇到的是右部
 				{
-					if(string(toke).find("{")==-1)//排除语义动作SemantAction
-					{
+					//if(string(toke).find("{")==-1)//排除语义动作SemantAction
+					//{
 						tempRight.push_back(string(toke));
 						if(Terminal.count(string(toke))==0)//如果当前的toke不是终结符 那么一定是非终结符
 							NonTerminal.insert(toke);
-					}
+					//}
 					toke=strtok_s(NULL,"\t \n",&nextToke);
 				}
 			}
@@ -499,7 +623,7 @@ void ParseYaccFile()
 	ifile.close();
 	ofile.close();
 }
-void GeneratePDA()
+PDA GeneratePDA()
 {
 	PDA myPDA;
 	//默认Producer中存放的第0个产生式就是初始产生式 小心bug
@@ -507,9 +631,11 @@ void GeneratePDA()
 	Item item0;
 	int globalStateId=0;
 	Terminal.insert("$");//向终结符中插入结束符
+	GenerateProducerMap();//生成Producer索引
+	GenerateAllFirstWithOutRecursion();//生成所有非终结符的First
 	//设置初始状态
 	S0.id=globalStateId++;
-	if(Producers.size()==0)return;//如果当前灭有产生式 那就不玩了
+	if(Producers.size()==0)return myPDA;//如果当前灭有产生式 那就不玩了
 	Producers[0].lookaheadSymbol="$";//首个符号加入$作为终结表示
 	S0.itemSet.push_back(Producers[0]);//将第0个产生式加入初始状态中
 	Closure(S0);
@@ -524,11 +650,17 @@ void GeneratePDA()
 		{
 			//对于每一个状态，实施GOTO X 行为
 			PDAstate newPDAstate;
+			//cout<<globalStateId<<"\t"<<i<<"\t";
 			//下面是对当前的状态施行基于终结符和非终结符的GOTO操作
 			//如果 GOTO的结果非空并且目前的状态集中不含有 那么加入作为一个新状态
+			//cout<<"1";
+			
+			
 			for(auto ter=Terminal.begin();ter!=Terminal.end();ter++)
 			{
+				
 				newPDAstate=GOTO(myPDA.states[i],*ter);
+				
 				if(newPDAstate.itemSet.size()!=0)
 				{
 					int stateId=PDAstateContained(myPDA,newPDAstate);
@@ -552,6 +684,7 @@ void GeneratePDA()
 					}
 				}
 			}
+			
 			for(auto ter=NonTerminal.begin();ter!=NonTerminal.end();ter++)
 			{
 				newPDAstate=GOTO(myPDA.states[i],*ter);
@@ -578,20 +711,136 @@ void GeneratePDA()
 					}
 				}
 			}
+			//cout<<" S";
+			//cout<<endl<<endl<<endl;
 		}
 	}
 	while(myPDA.states.size()!=lastSize);//重复迭代一直到PDA的大小不再变化
 	myPDA.printState();
 	debugprint("\n[+]Generate PDA test finish\n");
+	return myPDA;
 }
+void GenerateAnalaysingTable(PDA & myPDA)
+{
+	map<string,string> ElementType;
+	map<string,int> ElementValue;
+	struct Element{
+		string type;
+		int value;
+	};
+	int stateRows=myPDA.states.size();
+	int actionCols=Terminal.size();
+	int gotoCols=NonTerminal.size();
+	vector<vector<Element>> ACTIONtable;
+	vector<vector<Element>> GOTOtable;
+	//为了方便操作  把set<string> 的 terminal 和 nonterminal 转成 vector<string>
+	vector<string> TerminalVec;
+	vector<string> NonTerminalVec;
+	map<string,int> TerminalIndexMap;
+	map<string,int> NonTerminalIndexMap;
+	for(auto i=Terminal.begin();i!=Terminal.end();i++)
+	{
+		TerminalIndexMap[*i]=TerminalVec.size();
+		TerminalVec.push_back(*i);
+	}
+	for(auto i=NonTerminalVec.begin();i!=NonTerminalVec.end();i++)
+	{
+		NonTerminalIndexMap[*i]=NonTerminalVec.size();
+		NonTerminalVec.push_back(*i);
+	}
+	//首先记录S',确保第一条产生式是开始的那一个
+	string startSymbol=Producers[0].left;
+	
+	for(int row=0;row<stateRows;row++)
+	{
+		//对每个状态进行ACTION 和 GOTO表的填充
+		//首先是ACTION表
+		vector<Element> tempActionRow(actionCols);
+		vector<Element> tempGotoRow(gotoCols);
 
+		for(int colAction=0;colAction<TerminalVec.size();colAction++)
+		{
+			//首先清空所有元素为空error
+			tempActionRow[colAction].type="error";
+			tempActionRow[colAction].value=0;
+		}
+		for(int i=0;i<myPDA.states[row].edges.size();i++)
+		{
+			//将所有的移入操作存入到表中 Sj
+			string terSym=myPDA.states[row].edges[i].symbol;
+			if(Terminal.count(terSym)!=0)
+			{
+				int terIndex=TerminalIndexMap[terSym];
+				tempActionRow[terIndex].type="S";
+				tempActionRow[terIndex].value=myPDA.states[row].edges[i].nextState;
+			}
+		}
+		for(int i=0;i<myPDA.states[row].itemSet.size();i++)
+		{
+			//将所有的规约操作存入到表中 Rj
+			Item thisItem=myPDA.states[row].itemSet[i];
+			if(thisItem.GetCurrentSymbol()==END)
+			{
+				//当前这一项达到了末尾
+				if(thisItem.left==startSymbol)
+				{//如果是S' 那么标记为accept
+					int terIndex=TerminalIndexMap["$"];//终止符的下标
+					tempActionRow[terIndex].type="Acc";
+					tempActionRow[terIndex].value=0;
+				}
+				else
+				{
+					//计算出当前这个Item产生式是Producer中第几个
+					int itemIndex=GetProducerIndex(thisItem);
+					int terIndex=TerminalIndexMap[thisItem.lookaheadSymbol];
+					tempActionRow[terIndex].type="R";
+					tempActionRow[terIndex].value=itemIndex;
+				}
+			}
+		}
+		//下面开始计算GOTO表
+		for(int colGoto=0;colGoto<NonTerminalVec.size();colGoto++)
+		{
+			//首先清空所有元素为空error
+			tempGotoRow[colGoto].type="ERROR";
+			tempActionRow[colGoto].value=0;
+		}
+		for(int i=0;i<myPDA.states[row].edges.size();i++)
+		{
+			//将所有的GOTO操作存入到表中 j
+			string nonTerSym=myPDA.states[row].edges[i].symbol;
+			if(NonTerminal.count(nonTerSym)!=0)
+			{
+				int nonTerIndex=NonTerminalIndexMap[nonTerSym];
+				tempActionRow[nonTerIndex].type="GOTO";
+				tempActionRow[nonTerIndex].value=myPDA.states[row].edges[i].nextState;
+			}
+		}
+
+	}
+	//检查！
+}
 void main()
 {
 	//Step1. 读取yacc文件
-	ParseYaccFile();
+	ParseYaccFile("D:\\test.y");
 	//Step2. 生成下推自动机
-	GeneratePDA();
+	PDA myPDA=GeneratePDA();
+	
 	//Step3. 
+	GenerateAnalaysingTable(myPDA);
+	/*
+	for(auto nonTer=NonTerminal.begin();nonTer!=NonTerminal.end();nonTer++)
+	{
+		set<string> res=FirstCollection[*nonTer];
+		printf("First(%s)= {",nonTer->c_str());
+		for(auto i=res.begin();i!=res.end();i++)
+		{
+			cout<<*i<<",";
+		}
+		cout<<"}\n";
+	}
+	*/
 	std::cout<<"Done\n";
 }
 
