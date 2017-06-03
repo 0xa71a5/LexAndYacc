@@ -113,6 +113,15 @@ set <string> NonTerminal;//非终结符集
 vector <Item>	 Producers;//产生式集  使用set报错？？？
 PDA globalPDA;
 map<string,set<string>> FirstCollection;
+struct Element{
+		string type;
+		int value;
+	};
+vector<string> TerminalVec;
+vector<string> NonTerminalVec;
+map<string,int> TerminalIndexMap;
+map<string,int> NonTerminalIndexMap;
+
 
 struct Op{
 	string name;
@@ -623,6 +632,22 @@ void ParseYaccFile(string filename)
 	}
 	ifile.close();
 	ofile.close();
+
+	//为了方便操作  把set<string> 的 terminal 和 nonterminal 转成 vector<string>
+	Terminal.insert("$");//向终结符中插入结束符
+	GenerateProducerMap();//生成Producer索引
+	GenerateAllFirstWithOutRecursion();//生成所有非终结符的First
+	for(auto i=Terminal.begin();i!=Terminal.end();i++)
+	{
+		TerminalIndexMap[*i]=TerminalVec.size();
+		TerminalVec.push_back(*i);
+	}
+	for(auto i=NonTerminal.begin();i!=NonTerminal.end();i++)
+	{
+		NonTerminalIndexMap[*i]=NonTerminalVec.size();
+		NonTerminalVec.push_back(*i);
+	}
+
 }
 PDA GeneratePDA()
 {
@@ -631,9 +656,7 @@ PDA GeneratePDA()
 	PDAstate S0;//设置初始状态
 	Item item0;
 	int globalStateId=0;
-	Terminal.insert("$");//向终结符中插入结束符
-	GenerateProducerMap();//生成Producer索引
-	GenerateAllFirstWithOutRecursion();//生成所有非终结符的First
+	
 	//设置初始状态
 	S0.id=globalStateId++;
 	if(Producers.size()==0)return myPDA;//如果当前灭有产生式 那就不玩了
@@ -651,7 +674,7 @@ PDA GeneratePDA()
 		{
 			//对于每一个状态，实施GOTO X 行为
 			PDAstate newPDAstate;
-			//cout<<globalStateId<<"\t"<<i<<"\t";
+			cout<<globalStateId<<"\t"<<i<<"\n";
 			//下面是对当前的状态施行基于终结符和非终结符的GOTO操作
 			//如果 GOTO的结果非空并且目前的状态集中不含有 那么加入作为一个新状态
 			//cout<<"1";
@@ -721,15 +744,7 @@ PDA GeneratePDA()
 	debugprint("\n[+]Generate PDA test finish\n");
 	return myPDA;
 }
-struct Element{
-		string type;
-		int value;
-	};
-vector<string> TerminalVec;
-vector<string> NonTerminalVec;
-map<string,int> TerminalIndexMap;
-map<string,int> NonTerminalIndexMap;
-void GenerateAnalaysingTable(PDA & myPDA,vector<vector<Element>> &ACTIONtable,vector<vector<Element>>& GOTOtable)
+void GenerateAnalaysingTable(PDA & myPDA,vector<vector<Element>> &ACTIONtable,vector<vector<Element>>& GOTOtable,string filename="Table.txt")
 {
 	map<string,string> ElementType;
 	map<string,int> ElementValue;
@@ -738,19 +753,8 @@ void GenerateAnalaysingTable(PDA & myPDA,vector<vector<Element>> &ACTIONtable,ve
 	int actionCols=Terminal.size();
 	int gotoCols=NonTerminal.size();
 	
+	ofstream ofile(filename.c_str(),ios::out);
 	
-	//为了方便操作  把set<string> 的 terminal 和 nonterminal 转成 vector<string>
-	
-	for(auto i=Terminal.begin();i!=Terminal.end();i++)
-	{
-		TerminalIndexMap[*i]=TerminalVec.size();
-		TerminalVec.push_back(*i);
-	}
-	for(auto i=NonTerminal.begin();i!=NonTerminal.end();i++)
-	{
-		NonTerminalIndexMap[*i]=NonTerminalVec.size();
-		NonTerminalVec.push_back(*i);
-	}
 	//首先记录S',确保第一条产生式是开始的那一个
 	string startSymbol=Producers[0].left;
 	
@@ -828,14 +832,23 @@ void GenerateAnalaysingTable(PDA & myPDA,vector<vector<Element>> &ACTIONtable,ve
 	//首先打印ACTION table
 	printf("\n****************ACTION table******************\n");
 	printf(" \t");
+	int rows=ACTIONtable.size();
+	int colOfActionTable=ACTIONtable[0].size();
+	int colOfGotoTable=GOTOtable[0].size();
+	ofile<<rows<<"\t"<<colOfActionTable<<"\t"<<colOfGotoTable<<"\n";//存储到文件中
+	ofile<<"ACTION\n";
+
+
 	for(int i=0;i<TerminalVec.size();i++)
 		printf("  %s \t",TerminalVec[i].c_str());
 	printf("\n");
+	
 	for(int i=0;i<ACTIONtable.size();i++)
 	{
 		printf("%d:\t",i);
 		for(int j=0;j<ACTIONtable[i].size();j++)
 		{
+			ofile<<ACTIONtable[i][j].type<<" "<<ACTIONtable[i][j].value<<"\t";
 			if(ACTIONtable[i][j].type=="ERROR")
 				printf("(    )\t");
 			else if(ACTIONtable[i][j].type=="ACC")
@@ -843,9 +856,11 @@ void GenerateAnalaysingTable(PDA & myPDA,vector<vector<Element>> &ACTIONtable,ve
 			else
 				printf("(%s%d  )\t",ACTIONtable[i][j].type.c_str(),ACTIONtable[i][j].value);
 		}
+		ofile<<"\n";
 		printf("\n");
 	}
 	//打印GOTO table
+	ofile<<"GOTO\n";
 	printf("\n****************GOTO table******************\n");
 	printf(" \t");
 	for(int i=0;i<NonTerminalVec.size();i++)
@@ -856,16 +871,68 @@ void GenerateAnalaysingTable(PDA & myPDA,vector<vector<Element>> &ACTIONtable,ve
 		printf("%d:\t",i);
 		for(int j=0;j<GOTOtable[i].size();j++)
 		{
+			ofile<<GOTOtable[i][j].type<<" "<<GOTOtable[i][j].value<<"\t";
 			if(GOTOtable[i][j].type=="ERROR")
 				printf("(   )\t");
 			else
 				printf("( %d )\t",GOTOtable[i][j].value);
 		}
+		ofile<<"\n";
 		printf("\n");
 	}
 
 }
+void GenerateAnalaysingTableFromFile(vector<vector<Element>> &ACTIONtable,vector<vector<Element>>& GOTOtable,string filename)
+{
+	ifstream ifile;
+	ifile.open(filename.c_str(), ios::in);
+	int rows=0;
+	int colOfActionTable=0;
+	int colOfGotoTable=0;
+	ifile>>rows>>colOfActionTable>>colOfGotoTable;//从文件读取到内存
+	//printf("rows=%d\ncolOfActionTable=%d\ncolofGotoTable=%d\n",rows,colOfActionTable,colOfGotoTable);
+	string segmentType;
+	ifile>>segmentType;
+	printf("[read file]*************ACTION TABLE*************\n");
+	for(int row=0;row<rows;row++)
+	{
+		string type="";
+		int value=0;
+		Element tuple;
+		vector<Element> tuples;
+		for(int col=0;col<colOfActionTable;col++)
+		{
+			ifile>>type>>value;
+			printf("(%s,%d)\t",type.c_str(),value);
+			tuple.type=type;
+			tuple.value=value;
+			tuples.push_back(tuple);
+		}
+		ACTIONtable.push_back(tuples);
+		printf("\n");
+	}
+	printf("[read file]*************GOTO TABLE*************\n");
+	ifile>>segmentType;//分隔符
+	for(int row=0;row<rows;row++)
+	{
+		string type="";
+		int value=0;
+		Element tuple;
+		vector<Element> tuples;
+		for(int col=0;col<colOfGotoTable;col++)
+		{
+			ifile>>type>>value;
+			printf("(%s,%d)\t",type.c_str(),value);
+			tuple.type=type;
+			tuple.value=value;
+			tuples.push_back(tuple);
+		}
+		GOTOtable.push_back(tuples);
+		printf("\n");
+	}
+	ifile.close();
 
+}
 void GrammarRun(vector<vector<Element>> ACTIONtable,vector<vector<Element>> GOTOtable,vector<string> grammarInput)
 {
 	string a;//存放w$中第一个符号
@@ -938,10 +1005,13 @@ void GrammarRun(vector<vector<Element>> ACTIONtable,vector<vector<Element>> GOTO
 	}
 	printf("[+]GrammarDone!\n");
 }
-void main()
+
+void main_()//第一次运行，可生成Table文件
 {
 	//构造测试语法属于字符串
 	vector<string> testString;
+	//testString.push_back("id");
+	//testString.push_back("=");
 	testString.push_back("id");
 	testString.push_back("+");
 	testString.push_back("(");
@@ -957,9 +1027,36 @@ void main()
 	//Step3. 生成分析表
 	vector<vector<Element>> ACTIONtable;
 	vector<vector<Element>> GOTOtable;
-	GenerateAnalaysingTable(myPDA,ACTIONtable,GOTOtable);
+	GenerateAnalaysingTable(myPDA,ACTIONtable,GOTOtable,"D:\\Table.txt");
 	//Step4. 构造LR分析程序
 	GrammarRun(ACTIONtable,GOTOtable,testString);
 	std::cout<<"**********************Done*******************\n";
 }
 
+void main()//在运行过生成文件之后  可以直接运行读取文件中的Table
+{
+	//构造测试语法属于字符串
+	vector<string> testString;
+	//testString.push_back("id");
+	//testString.push_back("=");
+	testString.push_back("id");
+	testString.push_back("+");
+	testString.push_back("(");
+	testString.push_back("id");
+	testString.push_back("*");
+	testString.push_back("id");
+	testString.push_back(")");
+	testString.push_back("$");
+	//Step1. 读取yacc文件
+	ParseYaccFile("D:\\test2.y");
+	//Step2. 生成下推自动机
+	//PDA myPDA=GeneratePDA();
+	//Step3. 生成分析表
+	vector<vector<Element>> ACTIONtable;
+	vector<vector<Element>> GOTOtable;
+	GenerateAnalaysingTableFromFile(ACTIONtable,GOTOtable,"D:\\Table.txt");
+	//Step4. 构造LR分析程序
+	GrammarRun(ACTIONtable,GOTOtable,testString);
+	std::cout<<"**********************Done*******************\n";
+
+}
