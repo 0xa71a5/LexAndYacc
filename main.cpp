@@ -391,12 +391,12 @@ PDAstate GOTO(PDAstate I,string X)
 	//debugprint("[=]");
 	return J;
 }
-void ParseYaccFile(string filename)
+void ParseYaccFile(string filename,string filenameOutput)
 {
 	string srcFile = filename; //Yacc文件
 	
 	ifile.open(srcFile.c_str(), ios::in);
-	ofile.open("D:\\generatedYacc.h", ios::out);
+	ofile.open(filenameOutput.c_str(), ios::out);
 	if (!ifile.is_open()) {
 		cerr << "[-]Error occured when open file!" << endl;
 		exit(1);
@@ -632,7 +632,7 @@ void ParseYaccFile(string filename)
 	}
 	ifile.close();
 	ofile.close();
-
+	int ttt=Producers[0].dotPosition;
 	//为了方便操作  把set<string> 的 terminal 和 nonterminal 转成 vector<string>
 	Terminal.insert("$");//向终结符中插入结束符
 	GenerateProducerMap();//生成Producer索引
@@ -1010,6 +1010,226 @@ void GrammarRun(vector<vector<Element>> ACTIONtable,vector<vector<Element>> GOTO
 	printf("\n[+]GrammarDone!\n");
 }
 
+void GenerateGrammarRunCode(vector<vector<Element>> ACTIONtable,vector<vector<Element>> GOTOtable,string filename)
+{
+	//vector<string> grammarInput
+	printf("**********Begin gen code*************\n");
+	ofile=ofstream(filename.c_str(),ios::app);
+	//首先初始化各个向量的内容
+	ofile<<"\n"
+		"class Item{\n"
+			"public:\n"
+			"    string left;\n"
+			"    vector<string> right;\n"
+			"    int dotPosition;\n"
+			"    string lookaheadSymbol;\n"
+			"    Item(){dotPosition=0;}\n"
+			"    bool Move()\n"
+			"    {\n"
+			"        if(GetCurrentSymbol()!=\"(END)\")\n"
+			"        {\n"
+			"            dotPosition++;\n"
+			"            return true;\n"
+			"        }\n"
+			"        else\n"
+			"            return false;\n"
+			"    }\n"
+			"    string GetCurrentSymbol()\n"
+			"    {\n"
+			"        if(dotPosition<right.size())\n"
+			"            return right[dotPosition];\n"
+			"        return \"(END)\";\n"
+			"    }\n"
+			"    string GetNextSymbol()\n"
+			"    {\n"
+			"        if(dotPosition+1<right.size())\n"
+			"            return right[dotPosition+1];\n"
+			"        return \"(END)\";\n"
+			"    }\n"
+			"    void printItem()\n"
+			"    {\n"
+			"        printf(\"%s ---> \",left.c_str());\n"
+			"        for(int i=0;i<right.size();i++)\n"
+			"        {\n"
+			"            if(dotPosition==i)\n"
+			"                printf(\".\");\n"
+			"            printf(\"%s \",right[i].c_str());\n"
+			"        }\n"
+			"        if(dotPosition==right.size())\n"
+			"            printf(\". \");\n"
+			"        printf(\",%s\\n\",lookaheadSymbol.c_str());\n"
+			"    }\n"
+			"};\n"
+			"map<string,int> TerminalIndexMap;\n"
+			"map<string,int> NonTerminalIndexMap;\n"
+			"vector <Item>   Producers;\n"
+		"struct Element{\n"
+		"string type;\n"
+		"int value;\n"
+		"};\n"
+		"vector<vector<Element>> ACTIONtable;\n"
+		"vector<vector<Element>> GOTOtable;\n"
+		""
+		"void InitTables()\n"
+		"{\n";
+		ofile<<"Item tmpItem;\n";
+		ofile<<"vector<string> tmpRight;\n";
+		for(int i=0;i<Producers.size();i++)
+		{
+			ofile<<"tmpItem.left=\""<<Producers[i].left<<"\";";   
+			for(int j=0;j<Producers[i].right.size();j++)
+			{
+				ofile<<"tmpRight.push_back(\""<<Producers[i].right[j]<<"\");";
+			}
+			ofile<<"tmpItem.right=tmpRight;";
+			ofile<<"Producers.push_back(tmpItem);";
+			ofile<<"tmpRight.clear();\n";
+		}
+			ofile<<"\tfor(int i=0;i<"<<ACTIONtable.size()<<";i++)\n"
+			"\t{\n"
+				"\tvector<Element> tuples("<<ACTIONtable[0].size()<<");\n"
+				"\tACTIONtable.push_back(tuples);\n"
+			"\t}\n"
+			"\tfor(int i=0;i<"<<GOTOtable.size()<<";i++)\n"
+			"\t{\n"
+				"\tvector<Element> tuples("<<GOTOtable[0].size()<<");\n"
+				"\tGOTOtable.push_back(tuples);\n"
+			"\t}\n";
+			int count=0;
+			for(auto i=Terminal.begin();i!=Terminal.end();i++)
+			{
+				ofile<<"TerminalIndexMap[\""<<*i<<"\"]="<<count++<<";\t";
+			}
+			count=0;
+			for(auto i=NonTerminal.begin();i!=NonTerminal.end();i++)
+			{
+				ofile<<"NonTerminalIndexMap[\""<<*i<<"\"]="<<count++<<";";  
+			}
+			
+	int changeRow=0;
+	for(int row=0;row<ACTIONtable.size();row++)
+	{
+		for(int col=0;col<ACTIONtable[0].size();col++)
+		{
+			string type=ACTIONtable[row][col].type;
+			int	   value=ACTIONtable[row][col].value;
+			ofile<<"\tACTIONtable["<<row<<"]["<<col<<"].type=\""<<type<<"\";";
+			ofile<<"\tACTIONtable["<<row<<"]["<<col<<"].value="<<value<<";";
+			changeRow++;
+			if(changeRow==10)
+			{
+				ofile<<"\n";
+				changeRow=0;
+			}
+		}
+	}
+	ofile<<"\n";
+	//gen goto 
+	for(int row=0;row<GOTOtable.size();row++)
+	{
+		for(int col=0;col<GOTOtable[0].size();col++)
+		{
+			string type=GOTOtable[row][col].type;
+			int	   value=GOTOtable[row][col].value;
+			ofile<<"\tGOTOtable["<<row<<"]["<<col<<"].type=\""<<type<<"\";";
+			ofile<<"\tGOTOtable["<<row<<"]["<<col<<"].value="<<value<<";";
+			changeRow++;
+			if(changeRow==10)
+			{
+				ofile<<"\n";
+				changeRow=0;
+			}
+		}
+	}
+	ofile<<"\n";
+	ofile<<"}\n\n";	
+	ofile<<"void GrammarAnalysis(vector<string> grammarInput)\n"
+		"{\n"
+		    "string a;\n"
+    "stack<int> stateStack;\n"
+    "stateStack.push(0);\n"
+    "int inputPointer=0;\n"
+    "a=grammarInput[inputPointer++];\n"
+    "int t;\n"
+    "printf(\"[+]************Grammar Test Begin**************\\n\");\n"
+    "printf(\"Input token serials= \");\n"
+    "for(int i=0;i<grammarInput.size();i++)\n"
+        "\tcout<<grammarInput[i]<<\" \";\n"
+    "printf(\"\\n[+]Print reduce prodctions\\n\");\n"
+    "while(1)\n"
+    "{\n"
+        "int s=stateStack.top();\n"
+        "Element tempAction=ACTIONtable[s][TerminalIndexMap[a]];\n"
+        "if(tempAction.type==\"S\")\n"
+        "{\n"
+            "t=tempAction.value;\n"
+            "stateStack.push(t);\n"
+            "if(inputPointer<grammarInput.size())\n"
+            "{\n"
+                "\ta=grammarInput[inputPointer++];\n"
+            "}\n"
+            "else\n"
+            "{\n"
+                "\tprintf(\"[-]Grammar error!\\n\");\n"
+                "\tbreak;\n"
+            "}\n"
+        "}\n"
+        "else if(tempAction.type==\"R\")\n"
+        "{\n"
+            "int value=tempAction.value;\n"
+            "int lengthOfBeta=Producers[value].right.size();\n"
+            "bool errorFlag=false;\n"
+            "for(int i=0;i<lengthOfBeta;i++)\n"
+            "{\n"
+                "\tif(stateStack.size()!=0)\n"
+                    "\t\tstateStack.pop();\n"
+                "else\n"
+                "{\n"
+                    "\terrorFlag=true;\n"
+                    "\tbreak;\n"
+                "}\n"
+            "}\n"
+            "if(errorFlag)\n"
+            "{\n"
+                "\tprintf(\"[-]Grammar error!\\n\");\n"
+                "\tbreak;\n"
+            "}\n"
+            "t=stateStack.top();\n"
+            "Element tempGoto=GOTOtable[t][NonTerminalIndexMap[Producers[value].left]];\n"
+            "stateStack.push(tempGoto.value);\n"
+            "Producers[value].printItem();\n"
+        "}\n"
+        "else if(tempAction.type==\"ACC\")\n"
+        "{\n"
+            "\tprintf(\"[+]Grammar correct.Accept!\\n\");\n"
+            "\tbreak;\n"
+        "}\n"
+        "else\n"
+        "{\n"
+            "\tprintf(\"[-]Grammar error!\\n\");\n"
+            "\tbreak;\n"
+        "}\n"
+    "}\n"
+    "printf(\"\\n[+]GrammarDone!\\n\");\n"
+		"}\n"
+		"";
+	ofile<<"int yyparse(string filename)\n"
+	"{\n"
+	"    InitTables();\n"
+	"    vector<string> testString;\n"
+	"    GrammarAnalysis(testString);\n"
+	"    return 0;\n"
+	"}\n"
+	"int main(int argc,char *argv[])\n"
+	"{\n"
+	"   string filepath = string(argv[1]);\n"
+	"	return yyparse(filepath);\n"
+	"}\n"
+	"";
+	ofile.close();
+	printf("**********Complete gen code*************\\n");
+
+}
 vector<string> SplitString(const string &s, const string &seperator){
     vector<string> result;
     typedef string::size_type string_size;
@@ -1057,20 +1277,13 @@ void main()//第一次运行，可生成Table文件
 	int method=READ_FILE;
 
 	string input="VOID IDENTIFIER '(' VOID ')' "
-		" '{' INT IDENTIFIER ';' "
-			" IF  '(' IDENTIFIER 'EQ' NUM ')' "
-			" IDENTIFIER '=' NUM ';' "
-			" WHILE '(' IDENTIFIER 'EQ' IDENTIFIER ')' "
-				" '{' "
-					"  IDENTIFIER '=' NUM '+' NUM ';'  "
-					"  IDENTIFIER '=' NUM '-' NUM ';'  "
-				" '}' "
+		" '{' "
 		" '}' $ ";
 	vector<string> testString=SplitString(input," \t\n");
 	vector<vector<Element>> ACTIONtable;
 	vector<vector<Element>> GOTOtable;
 	//Step1. 读取yacc文件
-	ParseYaccFile("D:\\myyacc.y");
+	ParseYaccFile("D:\\myyacc.y","D:\\GenYacc.cpp");
 	if(method!=READ_FILE)//直接计算  不读文件
 	{
 		//Step2. 生成下推自动机
@@ -1083,7 +1296,21 @@ void main()//第一次运行，可生成Table文件
 		GenerateAnalaysingTableFromFile(ACTIONtable,GOTOtable,"D:\\myyacc.y.Table.txt");
 	}
 	//Step4. 构造LR分析程序
-	GrammarRun(ACTIONtable,GOTOtable,testString);
+	//GrammarRun(ACTIONtable,GOTOtable,testString);
+	//Step5. 输出代码
+	GenerateGrammarRunCode(ACTIONtable,GOTOtable,"D:\\GenYacc.cpp");
 	std::cout<<"**********************Done*******************\n";
 }
 
+/*
+string input="VOID IDENTIFIER '(' VOID ')' "
+		" '{' INT IDENTIFIER ';' "
+			" IF  '(' IDENTIFIER 'EQ' NUM ')' "
+			" IDENTIFIER '=' NUM ';' "
+			" WHILE '(' IDENTIFIER 'EQ' IDENTIFIER ')' "
+				" '{' "
+					"  IDENTIFIER '=' NUM '+' NUM ';'  "
+					"  IDENTIFIER '=' NUM '-' NUM ';'  "
+				" '}' "
+		" '}' $ ";
+*/
