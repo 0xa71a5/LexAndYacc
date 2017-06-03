@@ -740,7 +740,7 @@ PDA GeneratePDA()
 		}
 	}
 	while(myPDA.states.size()!=lastSize);//重复迭代一直到PDA的大小不再变化
-	myPDA.printState();
+	//myPDA.printState();
 	debugprint("\n[+]Generate PDA test finish\n");
 	return myPDA;
 }
@@ -838,47 +838,51 @@ void GenerateAnalaysingTable(PDA & myPDA,vector<vector<Element>> &ACTIONtable,ve
 	ofile<<rows<<"\t"<<colOfActionTable<<"\t"<<colOfGotoTable<<"\n";//存储到文件中
 	ofile<<"ACTION\n";
 
-
+	/*//打印终结符
 	for(int i=0;i<TerminalVec.size();i++)
 		printf("  %s \t",TerminalVec[i].c_str());
 	printf("\n");
-	
+	*/
 	for(int i=0;i<ACTIONtable.size();i++)
 	{
-		printf("%d:\t",i);
+		//printf("%d:\t",i);
 		for(int j=0;j<ACTIONtable[i].size();j++)
 		{
 			ofile<<ACTIONtable[i][j].type<<" "<<ACTIONtable[i][j].value<<"\t";
+			/*
 			if(ACTIONtable[i][j].type=="ERROR")
 				printf("(    )\t");
 			else if(ACTIONtable[i][j].type=="ACC")
 				printf("(%s )\t",ACTIONtable[i][j].type.c_str());
 			else
 				printf("(%s%d  )\t",ACTIONtable[i][j].type.c_str(),ACTIONtable[i][j].value);
+				*/
 		}
 		ofile<<"\n";
-		printf("\n");
+		//printf("\n");
 	}
 	//打印GOTO table
 	ofile<<"GOTO\n";
 	printf("\n****************GOTO table******************\n");
-	printf(" \t");
-	for(int i=0;i<NonTerminalVec.size();i++)
-		printf("  %s \t",NonTerminalVec[i].c_str());
-	printf("\n");
+	//printf(" \t");
+	//for(int i=0;i<NonTerminalVec.size();i++)
+	//	printf("  %s \t",NonTerminalVec[i].c_str());
+	//printf("\n");
 	for(int i=0;i<GOTOtable.size();i++)
 	{
-		printf("%d:\t",i);
+		//printf("%d:\t",i);
 		for(int j=0;j<GOTOtable[i].size();j++)
 		{
 			ofile<<GOTOtable[i][j].type<<" "<<GOTOtable[i][j].value<<"\t";
+			/*
 			if(GOTOtable[i][j].type=="ERROR")
 				printf("(   )\t");
 			else
 				printf("( %d )\t",GOTOtable[i][j].value);
+				*/
 		}
 		ofile<<"\n";
-		printf("\n");
+		//printf("\n");
 	}
 
 }
@@ -903,13 +907,13 @@ void GenerateAnalaysingTableFromFile(vector<vector<Element>> &ACTIONtable,vector
 		for(int col=0;col<colOfActionTable;col++)
 		{
 			ifile>>type>>value;
-			printf("(%s,%d)\t",type.c_str(),value);
+			//printf("(%s,%d)\t",type.c_str(),value);
 			tuple.type=type;
 			tuple.value=value;
 			tuples.push_back(tuple);
 		}
 		ACTIONtable.push_back(tuples);
-		printf("\n");
+		//printf("\n");
 	}
 	printf("[read file]*************GOTO TABLE*************\n");
 	ifile>>segmentType;//分隔符
@@ -922,13 +926,13 @@ void GenerateAnalaysingTableFromFile(vector<vector<Element>> &ACTIONtable,vector
 		for(int col=0;col<colOfGotoTable;col++)
 		{
 			ifile>>type>>value;
-			printf("(%s,%d)\t",type.c_str(),value);
+			//printf("(%s,%d)\t",type.c_str(),value);
 			tuple.type=type;
 			tuple.value=value;
 			tuples.push_back(tuple);
 		}
 		GOTOtable.push_back(tuples);
-		printf("\n");
+		//printf("\n");
 	}
 	ifile.close();
 
@@ -1003,58 +1007,82 @@ void GrammarRun(vector<vector<Element>> ACTIONtable,vector<vector<Element>> GOTO
 			break;
 		}
 	}
-	printf("[+]GrammarDone!\n");
+	printf("\n[+]GrammarDone!\n");
 }
 
-void main_()//第一次运行，可生成Table文件
+vector<string> SplitString(const string &s, const string &seperator){
+    vector<string> result;
+    typedef string::size_type string_size;
+    string_size i = 0;
+     
+    while(i != s.size()){
+        //找到字符串中首个不等于分隔符的字母；
+        int flag = 0;
+        while(i != s.size() && flag == 0){
+            flag = 1;
+            for(string_size x = 0; x < seperator.size(); ++x)
+               if(s[i] == seperator[x]){
+                   ++i;
+                   flag= 0;
+                    break;
+                  }
+		}
+         
+        //找到又一个分隔符，将两个分隔符之间的字符串取出；
+        flag = 0;
+        string_size j = i;
+        while(j != s.size() && flag == 0){
+            for(string_size x = 0; x < seperator.size(); ++x)
+              if(s[j] == seperator[x]){
+                   flag = 1;
+                break;
+                }
+            if(flag == 0)
+            ++j;
+        }
+        if(i != j){
+            result.push_back(s.substr(i, j-i));
+            i = j;
+        }
+    }
+    return result;
+}
+
+void main()//第一次运行，可生成Table文件
 {
 	//构造测试语法属于字符串
-	vector<string> testString;
-	//testString.push_back("id");
-	//testString.push_back("=");
-	testString.push_back("id");
-	testString.push_back("+");
-	testString.push_back("(");
-	testString.push_back("id");
-	testString.push_back("*");
-	testString.push_back("id");
-	testString.push_back(")");
-	testString.push_back("$");
+	string input="VOID IDENTIFIER '(' VOID ')' '{'   '}' $";
+	vector<string> testString=SplitString(input," \t\n");
 	//Step1. 读取yacc文件
-	ParseYaccFile("D:\\test2.y");
+	ParseYaccFile("D:\\myyacc.y");
 	//Step2. 生成下推自动机
 	PDA myPDA=GeneratePDA();
 	//Step3. 生成分析表
 	vector<vector<Element>> ACTIONtable;
 	vector<vector<Element>> GOTOtable;
-	GenerateAnalaysingTable(myPDA,ACTIONtable,GOTOtable,"D:\\Table.txt");
+	GenerateAnalaysingTable(myPDA,ACTIONtable,GOTOtable,"D:\\myyacc.y.Table.txt");
 	//Step4. 构造LR分析程序
 	GrammarRun(ACTIONtable,GOTOtable,testString);
 	std::cout<<"**********************Done*******************\n";
 }
 
-void main()//在运行过生成文件之后  可以直接运行读取文件中的Table
+
+
+void main_()//在运行过生成文件之后  可以直接运行读取文件中的Table
 {
 	//构造测试语法属于字符串
-	vector<string> testString;
 	//testString.push_back("id");
 	//testString.push_back("=");
-	testString.push_back("id");
-	testString.push_back("+");
-	testString.push_back("(");
-	testString.push_back("id");
-	testString.push_back("*");
-	testString.push_back("id");
-	testString.push_back(")");
-	testString.push_back("$");
+	string input="VOID IDENTIFIER '(' VOID ')' '{'  INT IDENTIFIER ';'  '}' $";
+	vector<string> testString=SplitString(input," \t\n");
 	//Step1. 读取yacc文件
-	ParseYaccFile("D:\\test2.y");
+	ParseYaccFile("D:\\myyacc.y");
 	//Step2. 生成下推自动机
 	//PDA myPDA=GeneratePDA();
 	//Step3. 生成分析表
 	vector<vector<Element>> ACTIONtable;
 	vector<vector<Element>> GOTOtable;
-	GenerateAnalaysingTableFromFile(ACTIONtable,GOTOtable,"D:\\Table.txt");
+	GenerateAnalaysingTableFromFile(ACTIONtable,GOTOtable,"D:\\myyacc.y.Table.txt");
 	//Step4. 构造LR分析程序
 	GrammarRun(ACTIONtable,GOTOtable,testString);
 	std::cout<<"**********************Done*******************\n";
