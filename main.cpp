@@ -8,6 +8,7 @@
 #include <map>
 #include <cstdlib>
 #include <queue>
+#include <stack>
 #include "mainHeader.h"
 #include <cstddef>
 #include<time.h>
@@ -720,24 +721,26 @@ PDA GeneratePDA()
 	debugprint("\n[+]Generate PDA test finish\n");
 	return myPDA;
 }
-void GenerateAnalaysingTable(PDA & myPDA)
-{
-	map<string,string> ElementType;
-	map<string,int> ElementValue;
-	struct Element{
+struct Element{
 		string type;
 		int value;
 	};
+vector<string> TerminalVec;
+vector<string> NonTerminalVec;
+map<string,int> TerminalIndexMap;
+map<string,int> NonTerminalIndexMap;
+void GenerateAnalaysingTable(PDA & myPDA,vector<vector<Element>> &ACTIONtable,vector<vector<Element>>& GOTOtable)
+{
+	map<string,string> ElementType;
+	map<string,int> ElementValue;
+	
 	int stateRows=myPDA.states.size();
 	int actionCols=Terminal.size();
 	int gotoCols=NonTerminal.size();
-	vector<vector<Element>> ACTIONtable;
-	vector<vector<Element>> GOTOtable;
+	
+	
 	//为了方便操作  把set<string> 的 terminal 和 nonterminal 转成 vector<string>
-	vector<string> TerminalVec;
-	vector<string> NonTerminalVec;
-	map<string,int> TerminalIndexMap;
-	map<string,int> NonTerminalIndexMap;
+	
 	for(auto i=Terminal.begin();i!=Terminal.end();i++)
 	{
 		TerminalIndexMap[*i]=TerminalVec.size();
@@ -862,36 +865,101 @@ void GenerateAnalaysingTable(PDA & myPDA)
 	}
 
 }
+
+void GrammarRun(vector<vector<Element>> ACTIONtable,vector<vector<Element>> GOTOtable,vector<string> grammarInput)
+{
+	string a;//存放w$中第一个符号
+	stack<int> stateStack;//存放状态的栈
+//#define DOLLAR -1
+	//stateStack.push(DOLLAR);
+	stateStack.push(0);//将首个状态压入栈，注意可能会出bug
+	int inputPointer=0;
+	a=grammarInput[inputPointer++];//令a为输入字符串的首位
+	int t;
+	printf("\n[+]************Grammar Test Begin**************\n");
+	printf("Input token serials= ");
+	for(int i=0;i<grammarInput.size();i++)
+		cout<<grammarInput[i]<<" ";
+	printf("\n[+]Print reduce prodctions\n");
+	while(1)
+	{
+		int s=stateStack.top();//另s是栈顶的状态
+		if(s==-1){}//注意这里有个dollar符号
+		Element tempAction=ACTIONtable[s][TerminalIndexMap[a]];
+		if(tempAction.type=="S")//如果ACTION[s,a]为移入t
+		{
+			t=tempAction.value;
+			stateStack.push(t);//将t压入栈中
+			if(inputPointer<grammarInput.size())
+			{
+				a=grammarInput[inputPointer++];//令a为下一个输入符号
+			}
+			else
+			{
+				printf("[-]Grammar error!\n");
+				break;
+			}
+		}
+		else if(tempAction.type=="R")//如果ACTION[s,a]为归约A->beta
+		{
+			int value=tempAction.value;
+			int lengthOfBeta=Producers[value].right.size();
+			bool errorFlag=false;
+			for(int i=0;i<lengthOfBeta;i++)
+			{
+				if(stateStack.size()!=0)
+					stateStack.pop();//从栈中弹出|beta|个符号
+				else
+				{
+					errorFlag=true;
+					break;
+				}
+			}
+			if(errorFlag)
+			{
+				printf("[-]Grammar error!\n");
+				break;
+			}
+		    t=stateStack.top();//令t为当前栈顶的状态
+			Element tempGoto=GOTOtable[t][NonTerminalIndexMap[Producers[value].left]];//tempGoto=GOTO[t,A]
+			stateStack.push(tempGoto.value);//将GOTO[t,A]压入栈中
+			Producers[value].printItem();//输出A->beta的产生式
+		}
+		else if(tempAction.type=="ACC")//接受状态
+		{
+			printf("[+]Grammar correct.Accept!");
+			break;//语法分析完成
+		}
+		else
+		{
+			printf("[-]Grammar error!\n");
+			break;
+		}
+	}
+	printf("[+]GrammarDone!\n");
+}
 void main()
 {
+	//构造测试语法属于字符串
+	vector<string> testString;
+	testString.push_back("id");
+	testString.push_back("+");
+	testString.push_back("(");
+	testString.push_back("id");
+	testString.push_back("*");
+	testString.push_back("id");
+	testString.push_back(")");
+	testString.push_back("$");
 	//Step1. 读取yacc文件
 	ParseYaccFile("D:\\test2.y");
 	//Step2. 生成下推自动机
 	PDA myPDA=GeneratePDA();
-	//Step3. 
-	GenerateAnalaysingTable(myPDA);
+	//Step3. 生成分析表
+	vector<vector<Element>> ACTIONtable;
+	vector<vector<Element>> GOTOtable;
+	GenerateAnalaysingTable(myPDA,ACTIONtable,GOTOtable);
+	//Step4. 构造LR分析程序
+	GrammarRun(ACTIONtable,GOTOtable,testString);
 	std::cout<<"**********************Done*******************\n";
 }
 
-
-void main_()
-{
-	string lineStr="abc";
-	lineStr=("ff");
-	cout<<"[]"<<lineStr<<"[]"<<endl;
-	/*
-	string firstEle="S";
-	set<string> res=First(firstEle);
-	printf("First(%s) = ",firstEle.c_str());
-	for(auto i=res.begin();i!=res.end();i++)
-		cout<<*i<<"\t";
-	cout<<endl;
-	*/	
-	/*
-					else
-					{
-						debugprint("\n[?]new state but already exsitd\n");
-						newPDAstate.printState();
-					}
-					*/
-}
