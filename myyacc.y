@@ -43,6 +43,7 @@ param : type_spec IDENTIFIER
 	;
 stmt_list : stmt_list stmt
 	|	EPLSION
+	|	stmt
 	;
 stmt : expr_stmt
 	| compound_stmt
@@ -58,6 +59,7 @@ while_stmt : WHILE '(' expr ')' stmt
 compound_stmt : '{' local_decls stmt_list '}'
 	|	'{' local_decls  '}'
 	|	'{'	 '}'
+	|	'{'  stmt_list '}'
 	;
 local_decls : local_decls local_decl
 	|	EPLSION

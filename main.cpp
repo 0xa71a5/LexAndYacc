@@ -1051,40 +1051,39 @@ vector<string> SplitString(const string &s, const string &seperator){
 void main()//第一次运行，可生成Table文件
 {
 	//构造测试语法属于字符串
-	string input="VOID IDENTIFIER '(' VOID ')' '{'   '}' $";
+#define READ_FILE 1
+#define NOT_READ_FILE 0
+
+	int method=READ_FILE;
+
+	string input="VOID IDENTIFIER '(' VOID ')' "
+		" '{' INT IDENTIFIER ';' "
+			" IF  '(' IDENTIFIER 'EQ' NUM ')' "
+			" IDENTIFIER '=' NUM ';' "
+			" WHILE '(' IDENTIFIER 'EQ' IDENTIFIER ')' "
+				" '{' "
+					"  IDENTIFIER '=' NUM '+' NUM ';'  "
+					"  IDENTIFIER '=' NUM '-' NUM ';'  "
+				" '}' "
+		" '}' $ ";
 	vector<string> testString=SplitString(input," \t\n");
-	//Step1. 读取yacc文件
-	ParseYaccFile("D:\\myyacc.y");
-	//Step2. 生成下推自动机
-	PDA myPDA=GeneratePDA();
-	//Step3. 生成分析表
 	vector<vector<Element>> ACTIONtable;
 	vector<vector<Element>> GOTOtable;
-	GenerateAnalaysingTable(myPDA,ACTIONtable,GOTOtable,"D:\\myyacc.y.Table.txt");
+	//Step1. 读取yacc文件
+	ParseYaccFile("D:\\myyacc.y");
+	if(method!=READ_FILE)//直接计算  不读文件
+	{
+		//Step2. 生成下推自动机
+		PDA myPDA=GeneratePDA();
+		//Step3. 生成分析表
+		GenerateAnalaysingTable(myPDA,ACTIONtable,GOTOtable,"D:\\myyacc.y.Table.txt");
+	}
+	else//直接从文件中读取table
+	{
+		GenerateAnalaysingTableFromFile(ACTIONtable,GOTOtable,"D:\\myyacc.y.Table.txt");
+	}
 	//Step4. 构造LR分析程序
 	GrammarRun(ACTIONtable,GOTOtable,testString);
 	std::cout<<"**********************Done*******************\n";
 }
 
-
-
-void main_()//在运行过生成文件之后  可以直接运行读取文件中的Table
-{
-	//构造测试语法属于字符串
-	//testString.push_back("id");
-	//testString.push_back("=");
-	string input="VOID IDENTIFIER '(' VOID ')' '{'  INT IDENTIFIER ';'  '}' $";
-	vector<string> testString=SplitString(input," \t\n");
-	//Step1. 读取yacc文件
-	ParseYaccFile("D:\\myyacc.y");
-	//Step2. 生成下推自动机
-	//PDA myPDA=GeneratePDA();
-	//Step3. 生成分析表
-	vector<vector<Element>> ACTIONtable;
-	vector<vector<Element>> GOTOtable;
-	GenerateAnalaysingTableFromFile(ACTIONtable,GOTOtable,"D:\\myyacc.y.Table.txt");
-	//Step4. 构造LR分析程序
-	GrammarRun(ACTIONtable,GOTOtable,testString);
-	std::cout<<"**********************Done*******************\n";
-
-}
